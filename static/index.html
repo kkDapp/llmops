@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enterprise RAG</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 20px 32px;
+      border-bottom: 1px solid #1e2535;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #0f1117;
+    }
+    header .logo { font-size: 22px; font-weight: 700; color: #7c83fd; }
+    header .sub  { font-size: 13px; color: #64748b; margin-top: 2px; }
+    header .badge {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: #1e2535;
+      color: #4ade80;
+      border: 1px solid #22c55e33;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── LEFT PANEL ── */
+    .sidebar {
+      background: #0d1018;
+      border-right: 1px solid #1e2535;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      overflow-y: auto;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #475569;
+      margin-bottom: 10px;
+    }
+
+    label { font-size: 13px; color: #94a3b8; display: block; margin-bottom: 6px; }
+
+    textarea, input[type=text], select {
+      width: 100%;
+      background: #131720;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .2s;
+      font-family: inherit;
+    }
+    textarea:focus, input[type=text]:focus, select:focus { border-color: #7c83fd; }
+    textarea { resize: vertical; min-height: 100px; }
+    select option { background: #1e2535; }
+
+    .strategy-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .strategy-btn {
+      padding: 8px 6px;
+      border-radius: 8px;
+      border: 1px solid #1e2535;
+      background: #131720;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: all .15s;
+    }
+    .strategy-btn:hover { border-color: #7c83fd44; color: #c7d2fe; }
+    .strategy-btn.active {
+      border-color: #7c83fd;
+      background: #7c83fd18;
+      color: #a5b4fc;
+    }
+
+    .ask-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #7c83fd, #6366f1);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    .ask-btn:hover { opacity: .9; }
+    .ask-btn:active { transform: scale(.98); }
+    .ask-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ingest */
+    .ingest-row { display: flex; gap: 8px; }
+    .ingest-row input { flex: 1; }
+    .ingest-btn {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #22c55e44;
+      background: #14532d22;
+      color: #4ade80;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .2s;
+    }
+    .ingest-btn:hover { background: #14532d44; }
+    .ingest-msg { font-size: 12px; margin-top: 6px; min-height: 16px; }
+    .ingest-msg.ok  { color: #4ade80; }
+    .ingest-msg.err { color: #f87171; }
+
+    /* ── RIGHT PANEL ── */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .empty-state {
+      margin: auto;
+      text-align: center;
+      color: #334155;
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h2 { font-size: 20px; color: #475569; margin-bottom: 6px; }
+    .empty-state p  { font-size: 14px; }
+
+    .msg { display: flex; flex-direction: column; gap: 8px; }
+
+    .msg-query {
+      align-self: flex-end;
+      max-width: 70%;
+      background: #7c83fd18;
+      border: 1px solid #7c83fd33;
+      border-radius: 14px 14px 4px 14px;
+      padding: 12px 16px;
+      font-size: 15px;
+      color: #c7d2fe;
+    }
+
+    .msg-answer {
+      align-self: flex-start;
+      max-width: 82%;
+    }
+
+    .answer-card {
+      background: #131720;
+      border: 1px solid #1e2535;
+      border-radius: 4px 14px 14px 14px;
+      padding: 16px 20px;
+    }
+    .answer-text {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: #1e2535;
+      color: #64748b;
+      border: 1px solid #2d3748;
+    }
+    .chip.strategy { color: #a5b4fc; border-color: #7c83fd33; }
+    .chip.cached   { color: #4ade80; border-color: #22c55e33; }
+    .chip.tokens   { color: #fbbf24; border-color: #d9770633; }
+
+    .sources-toggle {
+      font-size: 12px;
+      color: #475569;
+      cursor: pointer;
+      margin-top: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+    }
+    .sources-toggle:hover { color: #7c83fd; }
+
+    .sources-list {
+      display: none;
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sources-list.hidden { display: none; }
+
+    .source-item {
+      background: #0d1018;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .source-item .score {
+      float: right;
+      color: #7c83fd;
+      font-weight: 600;
+    }
+    .source-item .src-text {
+      margin-top: 4px;
+      color: #94a3b8;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .loading-dots span {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #7c83fd;
+      margin: 0 3px;
+      animation: bounce 1.2s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: .2s; }
+    .loading-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity:.4; }
+      40% { transform: translateY(-8px); opacity:1; }
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e2535; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">⚡ Enterprise RAG</div>
+    <div class="sub">Multi-strategy retrieval · Gemini 2.5 · LLMOps</div>
+  </div>
+  <a href="/static/architecture.html" style="margin-left:auto;font-size:12px;color:#64748b;padding:6px 14px;border:1px solid #1e2535;border-radius:8px;background:#131720">📐 Architecture</a>
+  <span class="badge" id="statusBadge" style="margin-left:12px">checking…</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div>
+      <div class="section-title">Query</div>
+      <textarea id="queryInput" placeholder="Ask anything about your documents…"></textarea>
+    </div>
+
+    <div>
+      <div class="section-title">Strategy</div>
+      <div class="strategy-grid" id="strategyGrid">
+        <button class="strategy-btn active" data-s="naive">Naive</button>
+        <button class="strategy-btn" data-s="advanced">Advanced</button>
+        <button class="strategy-btn" data-s="hybrid">Hybrid</button>
+        <button class="strategy-btn" data-s="graph">Graph</button>
+        <button class="strategy-btn" data-s="agentic" style="grid-column:span 2">Agentic</button>
+      </div>
+    </div>
+
+    <button class="ask-btn" id="askBtn" onclick="ask()">Ask →</button>
+
+    <div>
+      <div class="section-title">Ingest Document (GCS)</div>
+      <div class="ingest-row">
+        <input type="text" id="gcsUri" placeholder="gs://bucket/file.txt" />
+        <button class="ingest-btn" onclick="ingest()">Ingest</button>
+      </div>
+      <div class="ingest-msg" id="ingestMsg"></div>
+    </div>
+
+  </aside>
+
+  <!-- ── CHAT ── -->
+  <main class="main">
+    <div class="chat-area" id="chatArea">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🔍</div>
+        <h2>Ask your documents</h2>
+        <p>Type a question and choose a retrieval strategy.</p>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  let selectedStrategy = 'naive';
+
+  // strategy buttons
+  document.getElementById('strategyGrid').addEventListener('click', e => {
+    const btn = e.target.closest('.strategy-btn');
+    if (!btn) return;
+    document.querySelectorAll('.strategy-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedStrategy = btn.dataset.s;
+  });
+
+  // enter key submits
+  document.getElementById('queryInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
+  });
+
+  // health check
+  async function checkHealth() {
+    try {
+      const r = await fetch('/health');
+      const d = await r.json();
+      const badge = document.getElementById('statusBadge');
+      badge.textContent = d.status === 'ok' ? '● Live' : '● Degraded';
+      badge.style.color = d.status === 'ok' ? '#4ade80' : '#f87171';
+    } catch { document.getElementById('statusBadge').textContent = '● Offline'; }
+  }
+  checkHealth();
+  setInterval(checkHealth, 15000);
+
+  async function ask() {
+    const query = document.getElementById('queryInput').value.trim();
+    if (!query) return;
+
+    const btn = document.getElementById('askBtn');
+    btn.disabled = true;
+    btn.textContent = 'Thinking…';
+
+    // hide empty state
+    document.getElementById('emptyState').style.display = 'none';
+
+    const chatArea = document.getElementById('chatArea');
+
+    // user bubble
+    const msgEl = document.createElement('div');
+    msgEl.className = 'msg';
+    msgEl.innerHTML = `<div class="msg-query">${escHtml(query)}</div>`;
+
+    // loading
+    const loadEl = document.createElement('div');
+    loadEl.className = 'msg-answer';
+    loadEl.innerHTML = `<div class="answer-card"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
+    msgEl.appendChild(loadEl);
+    chatArea.appendChild(msgEl);
+    chatArea.scrollTop = chatArea.scrollHeight;
+
+    try {
+      const res = await fetch('/rag/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, strategy: selectedStrategy })
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+
+      const sourcesId = 'src-' + Date.now();
+      const cachedChip = data.cached ? `<span class="chip cached">⚡ cached</span>` : '';
+      const sourcesHtml = (data.sources || []).map((s, i) => `
+        <div class="source-item">
+          <span class="score">${(s.score*100).toFixed(0)}%</span>
+          <strong>Source ${i+1}</strong> · ${s.chunk_id?.slice(0,8) ?? ''}
+          <div class="src-text">${escHtml(s.text?.slice(0,300))}${s.text?.length > 300 ? '…' : ''}</div>
+        </div>`).join('');
+
+      loadEl.innerHTML = `
+        <div class="answer-card">
+          <div class="answer-text">${escHtml(data.answer)}</div>
+          <div class="meta-row">
+            <span class="chip strategy">⚙ ${data.strategy}</span>
+            <span class="chip">${data.latency_ms?.toFixed(0)} ms</span>
+            <span class="chip tokens">⬡ ${data.tokens_used} tokens</span>
+            ${cachedChip}
+          </div>
+          ${data.sources?.length ? `
+            <div class="sources-toggle" onclick="toggleSources('${sourcesId}', this)">▶ ${data.sources.length} source(s)</div>
+            <div class="sources-list hidden" id="${sourcesId}">${sourcesHtml}</div>
+          ` : ''}
+        </div>`;
+    } catch (err) {
+      loadEl.innerHTML = `<div class="answer-card"><div class="answer-text" style="color:#f87171">Error: ${escHtml(err.message)}</div></div>`;
+    }
+
+    chatArea.scrollTop = chatArea.scrollHeight;
+    document.getElementById('queryInput').value = '';
+    btn.disabled = false;
+    btn.textContent = 'Ask →';
+  }
+
+  function toggleSources(id, el) {
+    const el2 = document.getElementById(id);
+    const hidden = el2.classList.toggle('hidden');
+    el.textContent = (hidden ? '▶' : '▼') + el.textContent.slice(1);
+  }
+
+  async function ingest() {
+    const uri = document.getElementById('gcsUri').value.trim();
+    const msg = document.getElementById('ingestMsg');
+    if (!uri) { msg.textContent = 'Enter a GCS URI'; msg.className = 'ingest-msg err'; return; }
+    msg.textContent = 'Ingesting…'; msg.className = 'ingest-msg';
+    try {
+      const res = await fetch('/ingest/gcs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gcs_uri: uri })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      msg.textContent = `✓ ${data.chunks_created} chunks ingested`;
+      msg.className = 'ingest-msg ok';
+      document.getElementById('gcsUri').value = '';
+    } catch (err) {
+      msg.textContent = '✗ ' + err.message;
+      msg.className = 'ingest-msg err';
+    }
+  }
+
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>

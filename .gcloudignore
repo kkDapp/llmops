@@ -1,0 +1,23 @@
+.gcloudignore
+.git
+.gitignore
+
+# Terraform — provider cache and state are huge, not needed for Docker build
+infra/
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Local dev
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Logs and temp files
+*.log
+*.tmp
+notebooks/

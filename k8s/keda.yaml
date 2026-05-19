@@ -1,0 +1,46 @@
+# KEDA ScaledObject — scales GPU node pool from 0 to 1 when a fine-tune job is queued.
+# When no fine-tuning is running, GPU nodes scale to 0 (no cost).
+# When a fine-tune Argo Workflow starts, KEDA scales up a T4 GPU node automatically.
+#
+# WHY KEDA for GPU scaling:
+#   A T4 GPU node costs ~$0.54/hr.
+#   Fine-tuning runs once a week for ~2 hours = $1.08/week.
+#   Without KEDA, you pay for idle GPU nodes 24/7 = ~$90/week.
+#   KEDA scale-to-zero saves ~98% of GPU cost.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rag-finetune-gpu-scaler
+  namespace: argo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: argo-workflow-controller
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://kube-prometheus-stack-prometheus.monitoring:9090
+        metricName: argo_workflows_count
+        threshold: "1"
+        query: |
+          count(argo_workflow_info{namespace="argo",phase="Running"}
+          * on(name) argo_workflow_info{name=~"rag-finetune-.*"}) or vector(0)
+---
+# Node pool for GPU workloads (referenced by fine-tune-pipeline.yaml nodeSelector)
+# The actual GKE node pool is created by Terraform (infra/gke.tf)
+# This ConfigMap stores the node pool label for reference
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-node-config
+  namespace: argo
+data:
+  accelerator: "nvidia-tesla-t4"
+  node-pool: "gpu-node-pool"
+  machine-type: "n1-standard-4"

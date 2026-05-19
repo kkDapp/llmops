@@ -1,0 +1,32 @@
+# Secrets — never commit
+.env
+*.json.key
+application_default_credentials.json
+service_account*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+dist/
+.coverage
+htmlcov/
+
+# Terraform
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/*.tfvars
+
+# Notebooks checkpoints
+notebooks/.ipynb_checkpoints/
+
+# Logs and temp
+*.log
+*.tmp
+ci-mlflow.db

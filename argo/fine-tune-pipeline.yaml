@@ -1,0 +1,213 @@
+# QLoRA Fine-tuning Pipeline
+# Triggered by feedback-curator.yaml when enough training samples exist,
+# OR manually via: argo submit argo/fine-tune-pipeline.yaml -n argo -p dataset-version=20240101
+#
+# Pipeline steps:
+#   1. data-prep   → tokenize + format training pairs
+#   2. finetune    → QLoRA training on GPU node (KEDA scales GPU pool from 0 → 1)
+#   3. evaluate    → RAGAS eval on fine-tuned adapter vs @champion
+#   4. register    → if adapter beats @champion: register as @challenger in MLflow
+#
+# WHY QLoRA:
+#   Full fine-tuning a 7B model requires 8× A100 GPUs ($20/hr).
+#   QLoRA uses 4-bit quantization + Low-Rank Adapters:
+#   - Fine-tunes on a single T4 GPU ($0.54/hr)
+#   - Adapter is only ~50MB (the base model is unchanged)
+#   - Hot-loadable into vLLM without restarting
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: rag-finetune-
+  namespace: argo
+spec:
+  entrypoint: finetune-pipeline
+  arguments:
+    parameters:
+      - name: dataset-version
+        value: "20240101"
+      - name: base-model
+        value: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+      - name: app-image
+        value: "YOUR_REGISTRY/rag-api:latest"
+      - name: trainer-image
+        value: "YOUR_REGISTRY/rag-trainer:latest"
+      - name: faithfulness-threshold
+        value: "0.80"   # adapter must beat this to be registered
+
+  templates:
+    - name: finetune-pipeline
+      dag:
+        tasks:
+          - name: data-prep
+            template: prepare-data
+          - name: finetune
+            template: run-finetune
+            dependencies: [data-prep]
+          - name: evaluate
+            template: eval-adapter
+            dependencies: [finetune]
+          - name: register-if-better
+            template: register-adapter
+            dependencies: [evaluate]
+
+    - name: prepare-data
+      container:
+        image: "{{workflow.parameters.app-image}}"
+        command: [python, -c]
+        args:
+          - |
+            import json, os
+            from google.cloud import storage
+
+            project = os.environ["GCP_PROJECT_ID"]
+            version = "{{workflow.parameters.dataset-version}}"
+            gcs = storage.Client(project=project)
+            bucket = gcs.bucket(os.environ["GCS_PROCESSED_BUCKET"])
+
+            pairs = json.loads(
+                bucket.blob(f"feedback/datasets/v{version}/training_pairs.json").download_as_text()
+            )
+
+            # Format for instruction fine-tuning (Alpaca format)
+            formatted = []
+            for p in pairs:
+                formatted.append({
+                    "instruction": p["query"],
+                    "input": "",
+                    "output": f"[IMPROVED RESPONSE NEEDED] Original rating: {p['rating']}/5. Comment: {p.get('comment', '')}"
+                })
+
+            out_path = f"feedback/datasets/v{version}/formatted_train.json"
+            bucket.blob(out_path).upload_from_string(json.dumps(formatted))
+            print(f"Prepared {len(formatted)} training examples → gs://{os.environ['GCS_PROCESSED_BUCKET']}/{out_path}")
+        env:
+          - name: GCP_PROJECT_ID
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcp_project_id
+          - name: GCS_PROCESSED_BUCKET
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcs_processed_bucket
+
+    - name: run-finetune
+      # This runs on a GPU node — KEDA scales the GPU node pool from 0 to 1
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      container:
+        image: "{{workflow.parameters.trainer-image}}"
+        command: [python, -m, src.llmops.finetune]
+        args:
+          - --base-model={{workflow.parameters.base-model}}
+          - --dataset-version={{workflow.parameters.dataset-version}}
+          - --output-dir=/tmp/adapter
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+            memory: "16Gi"
+          requests:
+            cpu: "4"
+            memory: "12Gi"
+        env:
+          - name: GCP_PROJECT_ID
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcp_project_id
+          - name: GCS_PROCESSED_BUCKET
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcs_processed_bucket
+          - name: MLFLOW_TRACKING_URI
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: mlflow_tracking_uri
+
+    - name: eval-adapter
+      container:
+        image: "{{workflow.parameters.app-image}}"
+        command: [python, -c]
+        args:
+          - |
+            import asyncio, json, os
+            from src.evaluation.ragas_eval import RAGASEvaluator
+            from src.api.models import RAGStrategy
+
+            # Run RAGAS eval using the fine-tuned adapter (vLLM endpoint)
+            os.environ["VLLM_ADAPTER_PATH"] = f"/tmp/adapter"
+            evaluator = RAGASEvaluator()
+            metrics = asyncio.run(evaluator.evaluate(strategy=RAGStrategy.hybrid))
+            print(json.dumps({"adapter_metrics": metrics.model_dump()}))
+        env:
+          - name: GCP_PROJECT_ID
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcp_project_id
+          - name: MLFLOW_TRACKING_URI
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: mlflow_tracking_uri
+
+    - name: register-adapter
+      container:
+        image: "{{workflow.parameters.app-image}}"
+        command: [python, -c]
+        args:
+          - |
+            import mlflow, os
+
+            mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+            threshold = float("{{workflow.parameters.faithfulness-threshold}}")
+            version = "{{workflow.parameters.dataset-version}}"
+
+            # Get latest eval run score
+            runs = mlflow.search_runs(
+                experiment_names=["rag-eval"],
+                filter_string=f"tags.dataset_version = '{version}'",
+                order_by=["attributes.start_time DESC"],
+                max_results=1,
+            )
+            if runs.empty:
+                print("No eval run found — cannot register adapter")
+                exit(0)
+
+            faithfulness = runs.iloc[0].get("metrics.faithfulness", 0.0)
+            if faithfulness >= threshold:
+                print(f"Adapter faithfulness {faithfulness:.3f} >= threshold {threshold} — registering as @challenger")
+                mlflow.register_model(
+                    f"gs://{os.environ['GCS_PROCESSED_BUCKET']}/adapters/v{version}",
+                    "rag-llm-adapter",
+                )
+                client = mlflow.MlflowClient()
+                latest = client.get_latest_versions("rag-llm-adapter")[0]
+                client.set_registered_model_alias("rag-llm-adapter", "challenger", latest.version)
+                print(f"Registered adapter v{latest.version} as @challenger. Run /llmops/promote-model to promote to @champion.")
+            else:
+                print(f"Adapter faithfulness {faithfulness:.3f} < threshold {threshold} — NOT registering")
+        env:
+          - name: GCP_PROJECT_ID
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcp_project_id
+          - name: GCS_PROCESSED_BUCKET
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: gcs_processed_bucket
+          - name: MLFLOW_TRACKING_URI
+            valueFrom:
+              secretKeyRef:
+                name: rag-config
+                key: mlflow_tracking_uri

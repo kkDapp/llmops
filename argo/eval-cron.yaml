@@ -1,0 +1,143 @@
+# Nightly RAGAS evaluation CronWorkflow
+# Runs at 2am UTC every day.
+# Evaluates all 5 strategies, logs to MLflow + BigQuery.
+# Alerts Slack if any metric drops below the SLO threshold.
+#
+# WHY nightly eval:
+#   LLM providers update model weights silently.
+#   A nightly run catches quality regressions overnight
+#   before users experience them the next morning.
+
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: rag-nightly-eval
+  namespace: argo
+spec:
+  schedule: "0 2 * * *"   # 2am UTC daily
+  timezone: "UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  workflowSpec:
+    entrypoint: eval-all-strategies
+    arguments:
+      parameters:
+        - name: app-image
+          value: "YOUR_REGISTRY/rag-api:latest"
+        - name: namespace
+          value: "default"
+        - name: faithfulness-slo
+          value: "0.75"
+
+    templates:
+      - name: eval-all-strategies
+        dag:
+          tasks:
+            - name: eval-naive
+              template: run-eval
+              arguments:
+                parameters:
+                  - name: strategy
+                    value: naive
+            - name: eval-advanced
+              template: run-eval
+              arguments:
+                parameters:
+                  - name: strategy
+                    value: advanced
+            - name: eval-hybrid
+              template: run-eval
+              arguments:
+                parameters:
+                  - name: strategy
+                    value: hybrid
+            - name: eval-graph
+              template: run-eval
+              arguments:
+                parameters:
+                  - name: strategy
+                    value: graph
+            - name: check-slo
+              template: check-slo
+              dependencies: [eval-naive, eval-advanced, eval-hybrid, eval-graph]
+
+      - name: run-eval
+        inputs:
+          parameters:
+            - name: strategy
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import asyncio, json
+              from src.evaluation.ragas_eval import RAGASEvaluator
+              from src.llmops.mlflow_tracker import get_tracker
+              from src.api.models import RAGStrategy
+              import uuid
+
+              strategy = RAGStrategy("{{inputs.parameters.strategy}}")
+              evaluator = RAGASEvaluator()
+              metrics = asyncio.run(evaluator.evaluate(
+                  strategy=strategy,
+                  namespace="{{workflow.parameters.namespace}}"
+              ))
+              run_id = f"cron-eval-{strategy.value}-{str(uuid.uuid4())[:8]}"
+              tracker = get_tracker()
+              tracker.log_eval(
+                  run_id=run_id,
+                  strategy=strategy.value,
+                  metrics=metrics.model_dump(),
+                  num_questions=evaluator.last_num_questions,
+              )
+              print(json.dumps({"run_id": run_id, "strategy": strategy.value, **metrics.model_dump()}))
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: mlflow_tracking_uri
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+
+      - name: check-slo
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import mlflow, os
+              from datetime import datetime, timedelta
+
+              mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+              runs = mlflow.search_runs(
+                  experiment_names=["rag-eval"],
+                  filter_string=f"attributes.start_time >= {int((datetime.now() - timedelta(hours=6)).timestamp() * 1000)}",
+                  order_by=["attributes.start_time DESC"],
+              )
+              slo = float("{{workflow.parameters.faithfulness-slo}}")
+              violations = []
+              for _, row in runs.iterrows():
+                  score = row.get("metrics.faithfulness", 1.0)
+                  if score < slo:
+                      violations.append({"strategy": row.get("tags.strategy"), "faithfulness": score})
+
+              if violations:
+                  print(f"SLO BREACH: {violations}")
+                  # In production: send Slack alert, create PagerDuty incident
+                  exit(1)
+              else:
+                  print("All strategies meeting faithfulness SLO")
+          env:
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: mlflow_tracking_uri

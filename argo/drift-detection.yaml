@@ -1,0 +1,71 @@
+# Weekly Drift Detection CronWorkflow
+# Runs every Monday at 4am UTC.
+# Compares last 7 days of queries vs last 30 days (baseline).
+# If drift detected → logs to MLflow + sends alert.
+
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: rag-drift-detection
+  namespace: argo
+spec:
+  schedule: "0 4 * * 1"   # 4am UTC every Monday
+  timezone: "UTC"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    entrypoint: detect-drift
+    arguments:
+      parameters:
+        - name: app-image
+          value: "YOUR_REGISTRY/rag-api:latest"
+        - name: drift-threshold
+          value: "0.30"   # alert if >30% of features drift
+
+    templates:
+      - name: detect-drift
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import json, mlflow, os
+              from src.llmops.drift_monitor import DriftMonitor
+
+              monitor = DriftMonitor()
+              summary = monitor.run(reference_days=30, current_days=7)
+              print(json.dumps(summary))
+
+              # Log to MLflow
+              mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+              mlflow.set_experiment("rag-drift")
+              with mlflow.start_run(run_name="weekly-drift-check"):
+                  mlflow.log_metric("drift_detected", int(summary["drift_detected"]))
+                  mlflow.log_metric("share_of_drifted_columns", summary["share_of_drifted_columns"])
+                  mlflow.log_metric("reference_size", summary["reference_size"])
+                  mlflow.log_metric("current_size", summary["current_size"])
+                  if summary.get("drifted_columns"):
+                      mlflow.set_tag("drifted_columns", ",".join(summary["drifted_columns"]))
+
+              threshold = float("{{workflow.parameters.drift-threshold}}")
+              if summary["share_of_drifted_columns"] > threshold:
+                  print(f"DRIFT ALERT: {summary['share_of_drifted_columns']:.1%} features drifted!")
+                  print("Action required: review new query patterns and ingest relevant documents.")
+                  # In production: trigger Slack alert / PagerDuty
+                  exit(1)
+              else:
+                  print("Drift within acceptable range. No action needed.")
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: mlflow_tracking_uri
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"

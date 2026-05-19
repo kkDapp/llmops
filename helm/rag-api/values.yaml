@@ -1,0 +1,64 @@
+replicaCount: 2
+
+image:
+  repository: us-central1-docker.pkg.dev/llmops-495904/rag-repo/rag-api
+  pullPolicy: IfNotPresent
+  tag: ""  # overridden by --set image.tag=$GITHUB_SHA in CD pipeline
+
+serviceAccount:
+  name: rag-api
+  gcpServiceAccount: rag-api-sa@llmops-495904.iam.gserviceaccount.com
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  host: rag-api.llmops-495904.example.com
+  tlsSecretName: rag-api-tls
+  clusterIssuer: letsencrypt-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+env:
+  USE_VERTEX_VECTOR_SEARCH: "true"
+  USE_SEMANTIC_CACHE: "true"
+  ENABLE_GUARDRAILS: "true"
+
+# Secret name containing: gcp_project_id, redis_host, vector_search_index_id, etc.
+secretName: rag-config
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  readiness:
+    path: /ready
+    initialDelaySeconds: 15
+    periodSeconds: 10
+
+prometheus:
+  scrape: true
+  port: "8080"
+  path: /metrics

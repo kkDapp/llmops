@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RAG Architecture & Flow</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0f1117;--surface:#131720;--border:#1e2535;--text:#e2e8f0;
+      --muted:#64748b;--purple:#7c83fd;--green:#4ade80;--yellow:#fbbf24;
+      --red:#f87171;--blue:#38bdf8;--orange:#fb923c;
+    }
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+    a{color:var(--purple);text-decoration:none}
+    nav{position:sticky;top:0;z-index:100;background:#0d1018ee;backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:0;align-items:stretch;overflow-x:auto}
+    nav .brand{font-weight:700;color:var(--purple);font-size:15px;padding:16px 16px 16px 0;border-right:1px solid var(--border);margin-right:4px;white-space:nowrap;flex-shrink:0}
+    nav a{padding:18px 12px;font-size:12px;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+    nav a:hover,nav a.active{color:var(--text);border-bottom-color:var(--purple)}
+    .hero{padding:56px 48px 40px;max-width:1400px;margin:0 auto}
+    .hero h1{font-size:36px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#7c83fd,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+    .hero p{color:var(--muted);font-size:16px;max-width:700px}
+    section{padding:40px 48px;max-width:1400px;margin:0 auto;border-top:1px solid var(--border)}
+    section h2{font-size:22px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+    section h2 .num{background:var(--purple);color:#fff;border-radius:6px;padding:2px 9px;font-size:13px}
+    section h2 .badge-new{background:#166534;color:var(--green);border:1px solid #22c55e44;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600}
+    section .desc{color:var(--muted);font-size:14px;margin-bottom:28px;max-width:860px}
+    .cards{display:grid;gap:16px}
+    .cards.col2{grid-template-columns:repeat(2,1fr)}
+    .cards.col3{grid-template-columns:repeat(3,1fr)}
+    .cards.col4{grid-template-columns:repeat(4,1fr)}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+    .card h3{font-size:14px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+    .card p,.card li{font-size:13px;color:var(--muted);line-height:1.7}
+    .card ul{list-style:none;padding:0}
+    .card ul li::before{content:"›";color:var(--purple);margin-right:6px}
+    .card .tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;margin:2px;background:var(--border)}
+    .card .tag.green{background:#14532d44;color:var(--green);border:1px solid #22c55e33}
+    .card .tag.blue{background:#1e3a5f44;color:var(--blue);border:1px solid #38bdf833}
+    .card .tag.purple{background:#3730a344;color:#a5b4fc;border:1px solid #7c83fd33}
+    .card .tag.orange{background:#7c2d1244;color:var(--orange);border:1px solid #fb923c33}
+    .card .tag.red{background:#7f1d1d44;color:var(--red);border:1px solid #f8717133}
+    .mermaid-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;overflow-x:auto;margin-top:16px}
+    .mermaid{text-align:center}
+    .flow{display:flex;align-items:stretch;gap:0;overflow-x:auto;margin-top:16px}
+    .flow-step{flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:0;padding:14px 12px;text-align:center;position:relative}
+    .flow-step:first-child{border-radius:12px 0 0 12px}
+    .flow-step:last-child{border-radius:0 12px 12px 0}
+    .flow-step .icon{font-size:22px;margin-bottom:6px}
+    .flow-step .label{font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.06em}
+    .flow-step .sub{font-size:11px;color:var(--muted);margin-top:4px}
+    .flow-arrow{display:flex;align-items:center;padding:0 4px;color:var(--purple);font-size:18px;flex-shrink:0}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px}
+    th{text-align:left;padding:10px 16px;background:var(--surface);border:1px solid var(--border);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+    td{padding:10px 16px;border:1px solid var(--border);vertical-align:top}
+    tr:hover td{background:#131720}
+    .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+    .badge.fast,.badge.get{background:#14532d33;color:var(--green);border:1px solid #22c55e33}
+    .badge.med,.badge.post{background:#78350f33;color:var(--yellow);border:1px solid #d9770633}
+    .badge.slow{background:#7f1d1d33;color:var(--red);border:1px solid #ef444433}
+    .stack-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+    .stack-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;min-width:180px}
+    .stack-item .si-icon{font-size:24px}
+    .stack-item .si-info .si-name{font-size:13px;font-weight:700}
+    .stack-item .si-info .si-role{font-size:11px;color:var(--muted)}
+    .metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-top:16px}
+    .metric{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+    .metric .val{font-size:28px;font-weight:800;color:var(--purple)}
+    .metric .lbl{font-size:12px;color:var(--muted);margin-top:4px}
+    .bar-chart{margin-top:16px;display:flex;flex-direction:column;gap:10px}
+    .bar-row{display:flex;align-items:center;gap:12px;font-size:13px}
+    .bar-row .bar-lbl{width:90px;text-align:right;color:var(--muted)}
+    .bar-row .bar-track{flex:1;background:var(--border);border-radius:4px;height:22px;overflow:hidden}
+    .bar-row .bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:700;color:#fff;transition:width 1s ease}
+    .bar-row .bar-val{width:80px;color:var(--muted)}
+    .pipeline{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+    .pipe-stage{display:flex;gap:12px;align-items:flex-start}
+    .pipe-num{width:28px;height:28px;border-radius:50%;background:var(--purple);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+    .pipe-body{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+    .pipe-body h4{font-size:13px;font-weight:700;margin-bottom:4px}
+    .pipe-body p{font-size:12px;color:var(--muted)}
+    .pipe-connector{margin-left:14px;width:1px;height:12px;background:var(--border)}
+    .infra-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+    .infra-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+    .infra-box h4{font-size:13px;font-weight:700;color:var(--blue);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .infra-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+    .infra-item:last-child{border-bottom:none}
+    .infra-item .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .infra-item .detail{margin-left:auto;color:var(--muted);font-size:11px}
+    .callout{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:0 12px 12px 0;padding:16px 20px;margin-top:16px;font-size:13px;color:var(--muted)}
+    .callout strong{color:var(--text)}
+    .live-badge{display:inline-flex;align-items:center;gap:6px;background:#14532d22;border:1px solid #22c55e44;color:var(--green);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
+    .live-badge::before{content:"●";animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px}
+    .cost-table td:nth-child(3){color:var(--green)}
+    .cost-table td:nth-child(4){color:var(--yellow)}
+    code{font-family:ui-monospace,monospace;font-size:12px;background:#1e2535;padding:2px 6px;border-radius:4px}
+    @media(max-width:1000px){
+      .cards.col4,.cards.col3{grid-template-columns:1fr 1fr}
+      .metrics{grid-template-columns:repeat(3,1fr)}
+      .infra-grid,.two-col{grid-template-columns:1fr}
+      section{padding:32px 24px}
+      .hero{padding:40px 24px 28px}
+    }
+    @media(max-width:600px){
+      .cards.col4,.cards.col3,.cards.col2{grid-template-columns:1fr}
+      .metrics{grid-template-columns:1fr 1fr}
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">⚡ Enterprise RAG</div>
+  <a href="#overview">Overview</a>
+  <a href="#flow">Request Flow</a>
+  <a href="#strategies">Strategies</a>
+  <a href="#k8s">Kubernetes</a>
+  <a href="#observability">Observability</a>
+  <a href="#eval">RAG Eval</a>
+  <a href="#security">Security</a>
+  <a href="#ingestion">Ingestion</a>
+  <a href="#routing">Model Routing</a>
+  <a href="#inference">Inference Opt</a>
+  <a href="#llmops">LLMOps Loop</a>
+  <a href="#infra">Infrastructure</a>
+  <a href="#stack">Tech Stack</a>
+  <a href="/" style="margin-left:auto">← Back to UI</a>
+</nav>
+
+<div class="hero">
+  <h1>Architecture & Flow Reference</h1>
+  <p>Complete technical breakdown of the Enterprise Multi-RAG system. Covers Kubernetes production deployment, AI observability, RAG evaluation, security layer, async ingestion, multi-model routing, and inference optimization — the full picture of what a senior LLMOps engineer builds.</p>
+</div>
+
+<!-- ① SYSTEM OVERVIEW -->
+<section id="overview">
+  <h2><span class="num">1</span> System Overview</h2>
+  <p class="desc">Six Docker services locally, GKE in production. Five retrieval strategies, three model tiers, a full LLMOps feedback loop, and a real-time observability stack — all connected to GCP for embeddings, storage, and generation.</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="val">5</div><div class="lbl">RAG Strategies</div></div>
+    <div class="metric"><div class="val">6</div><div class="lbl">Docker Services</div></div>
+    <div class="metric"><div class="val">3</div><div class="lbl">Model Tiers</div></div>
+    <div class="metric"><div class="val">768</div><div class="lbl">Embed Dims</div></div>
+    <div class="metric"><div class="val">&lt;1ms</div><div class="lbl">Cache Hit</div></div>
+    <div class="metric"><div class="val">52</div><div class="lbl">Terraform Resources</div></div>
+  </div>
+
+  <div class="mermaid-wrap" style="margin-top:28px">
+    <div class="mermaid">
+graph TB
+    subgraph CLIENT["🖥️  Client"]
+        UI["Web UI\n/index.html"]
+        REST["REST Client"]
+    end
+
+    subgraph DOCKER["🐳  Docker Compose — localhost"]
+        direction TB
+        FASTAPI["⚡ FastAPI :8080\n2 uvicorn workers"]
+        CHROMA["🔵 ChromaDB :8000"]
+        REDIS["🔴 Redis :6379"]
+        MLFLOW["📊 MLflow :5000"]
+        PROM["📈 Prometheus :9090"]
+        GRAFANA["📉 Grafana :3000"]
+    end
+
+    subgraph GCP["☁️  Google Cloud Platform"]
+        VERTEX["Vertex AI\ntext-embedding-004"]
+        GEMINI["Gemini 2.5 Flash/Pro\ngoogle-generativeai"]
+        GCS["GCS Buckets"]
+        BQ["BigQuery\nrag_analytics"]
+    end
+
+    UI --> FASTAPI
+    REST --> FASTAPI
+    FASTAPI <--> CHROMA
+    FASTAPI <--> REDIS
+    FASTAPI --> MLFLOW
+    FASTAPI --> VERTEX
+    FASTAPI --> GEMINI
+    FASTAPI --> GCS
+    FASTAPI --> BQ
+    FASTAPI --> PROM
+    PROM --> GRAFANA
+
+    style DOCKER fill:#131720,stroke:#1e2535
+    style GCP fill:#0d1522,stroke:#1e3a5f
+    style CLIENT fill:#0d1018,stroke:#1e2535
+    </div>
+  </div>
+</section>
+
+<!-- ② REQUEST FLOW -->
+<section id="flow">
+  <h2><span class="num">2</span> Query Request Flow</h2>
+  <p class="desc">Step-by-step journey of a RAG query from the moment it arrives at the API to the generated answer. Every step is instrumented — latency, tokens, cache hits, and guardrail blocks are all recorded in Prometheus.</p>
+
+  <div class="flow">
+    <div class="flow-step"><div class="icon">📝</div><div class="label">User Query</div><div class="sub">POST /rag/query</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">🛡️</div><div class="label">Guardrails</div><div class="sub">Input filter + PII</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">⚡</div><div class="label">Cache</div><div class="sub">Redis hash lookup</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">🧠</div><div class="label">Model Router</div><div class="sub">Flash/Pro/LoRA</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">🔍</div><div class="label">Retrieve</div><div class="sub">ChromaDB + strategy</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">🤖</div><div class="label">Generate</div><div class="sub">Gemini 2.5</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">🛡️</div><div class="label">Output Guard</div><div class="sub">PII redaction</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">📊</div><div class="label">Observe</div><div class="sub">MLflow + Prometheus</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="icon">✅</div><div class="label">Response</div><div class="sub">JSON + sources</div></div>
+  </div>
+
+  <div class="mermaid-wrap" style="margin-top:24px">
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant API as FastAPI
+    participant G as Guardrails
+    participant R as Redis Cache
+    participant MR as Model Router
+    participant V as Vertex AI
+    participant C as ChromaDB
+    participant GM as Gemini 2.5
+    participant OBS as Prometheus/MLflow
+
+    U->>API: POST /rag/query {query, strategy}
+    API->>G: check_input(query)
+    G-->>API: pass / block (PII/injection)
+    API->>R: get(sha256(ns:strategy:query))
+    alt Cache HIT
+        R-->>API: cached RAGResponse
+        API->>OBS: inc cache_hits_total
+        API-->>U: {answer, cached:true, latency_ms}
+    else Cache MISS
+        API->>R: inc cache_misses_total
+        API->>MR: route(query) → tier (flash/pro/lora)
+        MR-->>API: ModelTier
+        API->>V: embed(query) → 768-dim vector
+        V-->>API: query_embedding
+        API->>C: similarity_search(embedding, top_k)
+        C-->>API: [chunks + scores]
+        API->>GM: generate(prompt + chunks, model_tier)
+        GM-->>API: answer + token_count
+        API->>G: check_output(answer)
+        G-->>API: redacted_answer
+        API->>R: setex(key, ttl, response)
+        API->>OBS: log(query, latency, tokens, tier)
+        API-->>U: {answer, sources, tokens, latency, cached:false}
+    end
+    </div>
+  </div>
+</section>
+
+<!-- ③ 5 STRATEGIES -->
+<section id="strategies">
+  <h2><span class="num">3</span> The 5 RAG Strategies</h2>
+  <p class="desc">Each strategy is a different retrieval pipeline. The Model Router automatically selects Flash vs Pro vs fine-tuned LoRA based on query complexity patterns. All 5 are selectable from the UI or via the REST API.</p>
+
+  <table>
+    <thead>
+      <tr><th>Strategy</th><th>How it retrieves</th><th>Best for</th><th>Latency (cold)</th><th>Cost</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>🔵 Naive</strong></td>
+        <td>Single vector similarity search → top-5 chunks → Gemini</td>
+        <td>Simple factual questions</td>
+        <td><span class="badge fast">~7s</span></td>
+        <td><span class="badge fast">Low</span></td>
+      </tr>
+      <tr>
+        <td><strong>🟡 Advanced</strong></td>
+        <td>Query rewriting → multi-query retrieval → re-ranking → Gemini</td>
+        <td>Ambiguous or complex queries</td>
+        <td><span class="badge med">~12s</span></td>
+        <td><span class="badge med">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>🟠 Hybrid</strong></td>
+        <td>Dense vector search + sparse BM25 → score fusion → Gemini</td>
+        <td>Queries with specific terms/entity names</td>
+        <td><span class="badge fast">~7s</span></td>
+        <td><span class="badge fast">Low</span></td>
+      </tr>
+      <tr>
+        <td><strong>🟣 Graph</strong></td>
+        <td>spaCy NER → entity graph (NetworkX) → graph traversal → Gemini</td>
+        <td>Multi-hop reasoning, relationship queries</td>
+        <td><span class="badge fast">~7s</span></td>
+        <td><span class="badge med">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>🔴 Agentic</strong></td>
+        <td>Iterative retrieve-decide loop — Gemini decides if more retrieval needed</td>
+        <td>Deep research, multi-step questions</td>
+        <td><span class="badge slow">~11-15s</span></td>
+        <td><span class="badge slow">High</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:24px">
+    <p class="desc" style="margin-bottom:12px">Latency comparison (approximate, cold cache):</p>
+    <div class="bar-chart">
+      <div class="bar-row"><span class="bar-lbl">Cache hit</span><div class="bar-track"><div class="bar-fill" style="width:1%;background:#38bdf8">~1ms</div></div></div>
+      <div class="bar-row"><span class="bar-lbl">Naive</span><div class="bar-track"><div class="bar-fill" style="width:45%;background:#4ade80">7s</div></div></div>
+      <div class="bar-row"><span class="bar-lbl">Hybrid</span><div class="bar-track"><div class="bar-fill" style="width:47%;background:#4ade80">7.5s</div></div></div>
+      <div class="bar-row"><span class="bar-lbl">Graph</span><div class="bar-track"><div class="bar-fill" style="width:46%;background:#4ade80">7s</div></div></div>
+      <div class="bar-row"><span class="bar-lbl">Advanced</span><div class="bar-track"><div class="bar-fill" style="width:78%;background:#fbbf24">12s</div></div></div>
+      <div class="bar-row"><span class="bar-lbl">Agentic</span><div class="bar-track"><div class="bar-fill" style="width:100%;background:#f87171">13s</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ④ KUBERNETES -->
+<section id="k8s">
+  <h2><span class="num">4</span> Kubernetes Production Architecture <span class="badge-new">PRODUCTION</span></h2>
+  <p class="desc">GKE cluster with Workload Identity (no service account keys), Horizontal Pod Autoscaler (2–10 pods, CPU 70%), KEDA scale-to-zero on Redis queue depth, and ingress via GKE Ingress with TLS termination. All secrets come from Kubernetes Secrets mounted as env vars — never baked into images.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph INTERNET["🌐 Internet"]
+        USER["Users"]
+    end
+
+    subgraph GKE["☁️  GKE Cluster — us-central1"]
+        direction TB
+        subgraph INGRESS["Ingress Layer"]
+            ING["GKE Ingress\nTLS termination\nHost-based routing"]
+        end
+        subgraph APP["rag-api Namespace"]
+            direction LR
+            SVC["ClusterIP Service\nrag-api-svc :8080"]
+            POD1["Pod 1\nrag-api:latest\n2 workers"]
+            POD2["Pod 2\nrag-api:latest\n2 workers"]
+            POD3["Pod N (auto)\nHPA: 2-10 pods"]
+            HPA["HPA\nCPU 70%\nMem 80%"]
+            KEDA["KEDA\nscale-to-zero\nRedis queue depth"]
+        end
+        subgraph MLFLOW_NS["mlflow Namespace"]
+            MFSVC["MLflow StatefulSet\nPVC 10Gi"]
+        end
+        subgraph SECRETS["Secrets"]
+            KSEC["K8s Secrets\ngemini-api-key\ngcp-project-id"]
+            WI["Workload Identity\nrag-api-sa → GCP SA\n(no JSON keys)"]
+        end
+    end
+
+    subgraph GCP["☁️  GCP"]
+        VERTEX2["Vertex AI\nembeddings"]
+        GEMINI2["Gemini API"]
+        MEMSTORE["Memorystore Redis\n1GB HA"]
+        VXSEARCH["Vertex Vector Search\n768-dim HNSW index"]
+    end
+
+    USER --> ING
+    ING --> SVC
+    SVC --> POD1
+    SVC --> POD2
+    SVC --> POD3
+    HPA -.->|scales| POD1
+    KEDA -.->|scale-to-zero| POD1
+    KSEC -.->|env mount| POD1
+    WI -.->|ADC| POD1
+    POD1 --> VERTEX2
+    POD1 --> GEMINI2
+    POD1 --> MEMSTORE
+    POD1 --> VXSEARCH
+
+    style GKE fill:#0d1522,stroke:#1e3a5f
+    style APP fill:#131720,stroke:#7c83fd
+    style SECRETS fill:#1e1b0d,stroke:#d97706
+    </div>
+  </div>
+
+  <div class="cards col3" style="margin-top:24px">
+    <div class="card">
+      <h3>📦 Deployment Strategy</h3>
+      <ul>
+        <li>Rolling update — zero-downtime deploys</li>
+        <li>maxSurge: 1, maxUnavailable: 0</li>
+        <li>readinessProbe on <code>/health</code> prevents bad rollouts</li>
+        <li>Resource requests: 500m CPU / 512Mi RAM</li>
+        <li>Resource limits: 2000m CPU / 2Gi RAM</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>📈 Autoscaling — Two Layers</h3>
+      <ul>
+        <li><strong>HPA</strong> — Kubernetes native, scales 2→10 pods on CPU/Mem</li>
+        <li><strong>KEDA</strong> — event-driven, scales to zero when Redis queue is empty</li>
+        <li>KEDA prevents paying for idle ingestion workers</li>
+        <li>Scale-up triggered in ~30s when Pub/Sub messages arrive</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔐 Workload Identity</h3>
+      <ul>
+        <li>Pod SA → GCP SA binding — no JSON keys anywhere</li>
+        <li>Scoped permissions: Vertex AI User + BigQuery Data Editor</li>
+        <li>Token auto-refreshed by GKE metadata server</li>
+        <li>ADC picks up identity transparently in Python SDK</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑤ AI OBSERVABILITY -->
+<section id="observability">
+  <h2><span class="num">5</span> AI Observability Stack <span class="badge-new">LIVE NOW</span></h2>
+  <p class="desc">Full observability across three layers: infrastructure metrics (Prometheus + Grafana), LLM experiment tracking (MLflow), and request tracing (OpenTelemetry). The Grafana dashboard is live at <a href="http://localhost:3000" target="_blank">localhost:3000</a> (admin / admin).</p>
+
+  <div class="cards col3" style="margin-bottom:24px">
+    <div class="card">
+      <h3>📈 Prometheus Metrics <span class="live-badge">Live</span></h3>
+      <ul>
+        <li><code>rag_requests_total</code> — by strategy, status, method</li>
+        <li><code>rag_request_latency_seconds</code> — histogram with p50/p95/p99</li>
+        <li><code>rag_cache_hits_total</code> — by strategy</li>
+        <li><code>rag_cache_misses_total</code> — by strategy</li>
+        <li><code>rag_tokens_total</code> — by strategy + model_tier</li>
+        <li><code>rag_active_requests</code> — gauge, in-flight requests</li>
+        <li><code>rag_guardrail_blocks_total</code> — input vs output</li>
+      </ul>
+      <div style="margin-top:10px"><a href="http://localhost:9090" target="_blank" class="tag blue">→ Prometheus :9090</a></div>
+    </div>
+    <div class="card">
+      <h3>📉 Grafana Dashboard <span class="live-badge">Live</span></h3>
+      <ul>
+        <li>Auto-provisioned on startup — no manual import</li>
+        <li>6 stat panels: req/s, p95 latency, cache hit rate, tokens/min, active requests, error rate</li>
+        <li>Latency percentile timeseries (p50/p95/p99)</li>
+        <li>Strategy distribution donut chart</li>
+        <li>Cache hits vs misses over time</li>
+        <li>Token consumption by model tier</li>
+        <li>Guardrail blocks + error rate by status</li>
+      </ul>
+      <div style="margin-top:10px"><a href="http://localhost:3000" target="_blank" class="tag green">→ Grafana :3000</a></div>
+    </div>
+    <div class="card">
+      <h3>📊 MLflow Experiment Tracking</h3>
+      <ul>
+        <li>Every RAG query logged as an MLflow run</li>
+        <li>Params: query hash, strategy, namespace, model_tier</li>
+        <li>Metrics: latency_ms, tokens_used, cached flag</li>
+        <li>RAGAS scores logged after eval runs</li>
+        <li>Model Registry for LoRA adapters</li>
+        <li>Artifacts: training datasets, eval reports</li>
+      </ul>
+      <div style="margin-top:10px"><a href="http://localhost:5000" target="_blank" class="tag orange">→ MLflow :5000</a></div>
+    </div>
+  </div>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph LR
+    subgraph API["FastAPI — Instrumentation"]
+        MW["MetricsMiddleware\nactive_requests gauge\nlatency histogram\nrequest counter"]
+        ROUTE["RAG Route\ncache_hits / misses\ntokens_total\nguardrail_blocks"]
+    end
+
+    subgraph OBSERVE["Observability Stack"]
+        PROM["Prometheus\nscrapes /metrics\nevery 15s"]
+        GRAFANA["Grafana\npre-built dashboard\nstat + timeseries"]
+        MLFLOW["MLflow\nexperiment runs\nmodel registry"]
+        BQ["BigQuery\nrag_analytics.queries\nlong-term analytics"]
+    end
+
+    MW -->|push| PROM
+    ROUTE -->|push| PROM
+    PROM -->|query| GRAFANA
+    ROUTE -->|log_run| MLFLOW
+    ROUTE -->|insert_rows| BQ
+
+    style OBSERVE fill:#0d1522,stroke:#1e3a5f
+    </div>
+  </div>
+</section>
+
+<!-- ⑥ RAG EVALUATION PIPELINE -->
+<section id="eval">
+  <h2><span class="num">6</span> RAG Evaluation Pipeline <span class="badge-new">AUTOMATED</span></h2>
+  <p class="desc">Continuous evaluation runs on an Argo CronWorkflow every 6 hours. RAGAS measures retrieval and generation quality; Evidently catches data drift in the query distribution. Low scores trigger a fine-tuning pipeline automatically.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph TRIGGER["Trigger (every 6h)"]
+        CRON["Argo CronWorkflow\neval-pipeline"]
+    end
+
+    subgraph EVAL["Evaluation"]
+        SAMPLE["Sample 100 recent\nqueries from BigQuery"]
+        RAGAS["RAGAS\nfaithfulness\nanswer_relevancy\ncontext_precision\ncontext_recall"]
+        DEEPEVAL["Evidently\nquery drift detection\ndistribution shift\nfeature drift"]
+    end
+
+    subgraph RESULTS["Results"]
+        SCORES["Aggregate Scores\nfaithfulness > 0.8?\nrelevancy > 0.75?"]
+        DRIFT_CHK{Scores below\nthreshold?}
+    end
+
+    subgraph ACTION["Action"]
+        LOG_PASS["Log to MLflow\nrun=PASS\nno action needed"]
+        FINETUNE_TRIGGER["Trigger Fine-tune\nargo submit\nfine-tune-pipeline"]
+        ALERT["Slack/PagerDuty\nalert on critical\ndrop"]
+    end
+
+    CRON --> SAMPLE
+    SAMPLE --> RAGAS
+    SAMPLE --> DEEPEVAL
+    RAGAS --> SCORES
+    DEEPEVAL --> SCORES
+    SCORES --> DRIFT_CHK
+    DRIFT_CHK -- No --> LOG_PASS
+    DRIFT_CHK -- Yes --> FINETUNE_TRIGGER
+    DRIFT_CHK -- Critical --> ALERT
+
+    style TRIGGER fill:#1e1b4b,stroke:#6366f1
+    style ACTION fill:#14532d,stroke:#22c55e
+    </div>
+  </div>
+
+  <div class="cards col2" style="margin-top:24px">
+    <div class="card">
+      <h3>🧪 RAGAS Metrics Explained</h3>
+      <table style="margin-top:8px">
+        <thead><tr><th>Metric</th><th>What it measures</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td>Faithfulness</td><td>Answer grounded in retrieved chunks?</td><td>&gt; 0.80</td></tr>
+          <tr><td>Answer Relevancy</td><td>Answer addresses the question?</td><td>&gt; 0.75</td></tr>
+          <tr><td>Context Precision</td><td>Retrieved chunks relevant to query?</td><td>&gt; 0.70</td></tr>
+          <tr><td>Context Recall</td><td>All needed info in retrieved chunks?</td><td>&gt; 0.65</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>📈 Evidently Drift Detection</h3>
+      <ul>
+        <li>Compares last 7-day query distribution vs baseline</li>
+        <li>Tests: Jensen-Shannon divergence on query embeddings</li>
+        <li>Detects topic shift — e.g., suddenly more legal queries</li>
+        <li>Outputs HTML report + JSON summary</li>
+        <li>JSON summary stored in MLflow artifacts</li>
+        <li>Triggers fine-tune if drift p-value &lt; 0.05</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑦ SECURITY LAYER -->
+<section id="security">
+  <h2><span class="num">7</span> Security Layer</h2>
+  <p class="desc">Defence in depth across every layer: prompt injection blocking and PII redaction in the API, secrets managed via Kubernetes Secrets + Workload Identity in production, ADC for GCP services locally, and zero service account keys stored on disk.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph PERIMETER["Network Perimeter"]
+        CORS["CORS Middleware\norigin whitelist"]
+        RATE["Rate Limiting\n(Nginx upstream)"]
+    end
+
+    subgraph APP_SEC["Application Security"]
+        INPUT["Input Guardrails\nPrompt injection patterns\nJailbreak detection\nSystem prompt leakage"]
+        OUTPUT["Output Guardrails\nPII Redaction\nEmail / Phone / SSN / CC\nRegex + context scan"]
+    end
+
+    subgraph SECRETS_MGMT["Secrets Management"]
+        K8S_SEC["Kubernetes Secrets\ngemini-api-key (base64)\nnever in image layers"]
+        WI2["Workload Identity\nPod SA → GCP SA\nno JSON keys on disk"]
+        ADC["Application Default Creds\ngcloud auth locally\nenvironment variable\nin CI/CD"]
+    end
+
+    subgraph DATA_SEC["Data Security"]
+        EMBED_ONLY["Embeddings only in\nChromaDB — no raw PII\nstored in vector store"]
+        BQ_IAM["BigQuery IAM\nrag-api-sa has Data Editor\nnot Project Owner"]
+    end
+
+    REQ["Incoming Request"] --> CORS
+    CORS --> RATE
+    RATE --> INPUT
+    INPUT -->|blocked| BLOCK["HTTP 400\nPrompt injection\ndetected"]
+    INPUT -->|pass| PROCESS["RAG Pipeline"]
+    PROCESS --> OUTPUT
+    OUTPUT -->|PII found| REDACT["Replace with\n[REDACTED] tokens"]
+    OUTPUT --> RESPONSE["Clean Response"]
+
+    style BLOCK fill:#7f1d1d,stroke:#f87171
+    style APP_SEC fill:#1e1b0d,stroke:#d97706
+    style SECRETS_MGMT fill:#0d1018,stroke:#4ade80
+    </div>
+  </div>
+
+  <div class="cards col3" style="margin-top:24px">
+    <div class="card">
+      <h3>🛡️ Prompt Injection Blocking</h3>
+      <ul>
+        <li>Detects "ignore previous instructions" patterns</li>
+        <li>Catches "forget your system prompt" variants</li>
+        <li>Blocks role-switching: "you are now DAN"</li>
+        <li>Case-insensitive regex matching</li>
+        <li>Returns HTTP 400 with sanitized error</li>
+        <li>Blocks counted in <code>rag_guardrail_blocks_total</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔍 PII Redaction (Output)</h3>
+      <ul>
+        <li>Email: <code>[\w.-]+@[\w.-]+\.\w+</code></li>
+        <li>Phone: US + international patterns</li>
+        <li>SSN: <code>\d{3}-\d{2}-\d{4}</code></li>
+        <li>Credit Card: Luhn-like patterns</li>
+        <li>All replaced with <code>[REDACTED]</code> before API response</li>
+        <li>Runs on LLM output, not stored documents</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔐 Secrets — Zero Trust</h3>
+      <ul>
+        <li>No secrets in Docker images or Dockerfiles</li>
+        <li><code>.env</code> is gitignored — never committed</li>
+        <li>Production: K8s Secrets → env vars at pod startup</li>
+        <li>GCP: Workload Identity — pods get token from metadata server</li>
+        <li>Gemini API key: <code>env_file</code> only, not in compose YAML</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑧ ASYNC INGESTION -->
+<section id="ingestion">
+  <h2><span class="num">8</span> Async Ingestion Pipeline</h2>
+  <p class="desc">Documents arrive from GCS, are chunked and embedded, and stored in ChromaDB. On-demand via the REST API for interactive use; at scale, GCS event triggers a Pub/Sub message which KEDA routes to an ingestion worker pool that scales to zero when idle.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph LR
+    subgraph SOURCES["Document Sources"]
+        UPLOAD["REST API\nPOST /ingest/upload"]
+        GCS_URI["REST API\nPOST /ingest/gcs\n{gcs_uri}"]
+        GCS_EVENT["GCS Object\nFinalize Event"]
+    end
+
+    subgraph ASYNC["Async Path (Scale)"]
+        PUBSUB["Pub/Sub\nrag-ingestion topic"]
+        WORKER["Ingestion Worker Pod\nKEDA: scale-to-zero\nwhen queue empty"]
+    end
+
+    subgraph PIPELINE["Processing Pipeline"]
+        LOADER["GCS Loader\ndownload + parse\nPyPDF / docx / txt"]
+        CHUNKER["Recursive Chunker\n512 tokens\n50 token overlap\npreserves sentence bounds"]
+        EMBEDDER["Vertex Embedder\ntext-embedding-004\nbatch: 32 chunks/call"]
+        STORE["ChromaDB\nstore vector + metadata\nchunk_id, source, page"]
+    end
+
+    subgraph RETRY["Reliability"]
+        DLQ["Dead Letter Queue\nfailed after 3 retries"]
+        BACKOFF["Exponential Backoff\n1s → 2s → 4s → DLQ"]
+    end
+
+    UPLOAD --> LOADER
+    GCS_URI --> LOADER
+    GCS_EVENT --> PUBSUB
+    PUBSUB --> WORKER
+    WORKER --> LOADER
+    LOADER --> CHUNKER
+    CHUNKER --> EMBEDDER
+    EMBEDDER --> STORE
+    STORE --> DONE["✅ {chunks_created: N}"]
+    EMBEDDER -->|error| BACKOFF
+    BACKOFF -->|3 fails| DLQ
+
+    style ASYNC fill:#1e1b4b,stroke:#6366f1
+    style PIPELINE fill:#131720,stroke:#7c83fd
+    style RETRY fill:#7f1d1d33,stroke:#f87171
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Chunking strategy:</strong> Recursive character splitter at 512 tokens with 50-token overlap. Overlap ensures context isn't lost at chunk boundaries — a sentence that starts at the end of one chunk also appears at the start of the next. Metadata stored per chunk: <code>source_uri</code>, <code>page_number</code>, <code>chunk_index</code>, <code>ingested_at</code>.
+  </div>
+</section>
+
+<!-- ⑨ MULTI-MODEL ROUTING -->
+<section id="routing">
+  <h2><span class="num">9</span> Multi-Model Routing</h2>
+  <p class="desc">Every query is routed to the right model tier by a rules engine that inspects query length, detected patterns, and load. Simple queries go to Flash (cheap, fast). Analytically complex queries go to Pro. After fine-tuning, domain-specific queries go to the LoRA adapter via vLLM. Cost multipliers are tracked per tier.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    Q["Incoming Query"] --> ROUTER["Model Router\nrouter.py"]
+
+    subgraph ROUTING_LOGIC["Routing Logic"]
+        direction LR
+        L1["Length check\n> 200 chars?"]
+        L2["Pattern match\nanalytical keywords\n(compare/analyze/calculate)"]
+        L3["Strategy check\nagentic = always Pro"]
+        L4["Load check\nPro busy? → Flash"]
+    end
+
+    ROUTER --> L1
+    ROUTER --> L2
+    ROUTER --> L3
+    ROUTER --> L4
+
+    subgraph MODELS["Model Tiers"]
+        FLASH["⚡ Gemini 2.5 Flash\nTier: flash\nCost: 1x\nLatency: ~7s\n99% of queries"]
+        PRO["🧠 Gemini 2.5 Pro\nTier: pro\nCost: 46x\nLatency: ~12s\n~1% of queries"]
+        LORA["🔧 vLLM + LoRA\nTier: fine-tuned\nCost: 0.5x (self-hosted)\nDomain-specific queries"]
+    end
+
+    L1 --> FLASH
+    L2 -->|analytical| PRO
+    L3 -->|agentic| PRO
+    L4 --> LORA
+
+    FLASH --> GEN["Generated Answer\n+ model_tier label\nin response"]
+    PRO --> GEN
+    LORA --> GEN
+
+    style FLASH fill:#14532d,stroke:#22c55e
+    style PRO fill:#1e1b4b,stroke:#6366f1
+    style LORA fill:#78350f,stroke:#d97706
+    </div>
+  </div>
+
+  <div class="cards col2" style="margin-top:24px">
+    <div class="card">
+      <h3>💰 Cost Comparison Table</h3>
+      <table class="cost-table" style="margin-top:8px">
+        <thead><tr><th>Model</th><th>Tier</th><th>Relative Cost</th><th>When used</th></tr></thead>
+        <tbody>
+          <tr><td>Gemini 2.5 Flash</td><td>flash</td><td style="color:var(--green)">1x</td><td>Default (simple queries)</td></tr>
+          <tr><td>Gemini 2.5 Pro</td><td>pro</td><td style="color:var(--yellow)">46x</td><td>Analytical keywords detected</td></tr>
+          <tr><td>vLLM + LoRA adapter</td><td>fine-tuned</td><td style="color:var(--green)">0.5x</td><td>Domain queries post fine-tune</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>🧠 Routing Rules (router.py)</h3>
+      <ul>
+        <li>Analytical patterns: <em>compare, analyze, evaluate, calculate, contrast, critique</em></li>
+        <li>Query length &gt; 200 chars → likely complex → Pro</li>
+        <li>Strategy = agentic → always Pro</li>
+        <li>Fine-tuned tier activated after successful LoRA hot-load to vLLM</li>
+        <li>Cost multiplier tracked per query in MLflow</li>
+        <li>Fallback: if Pro API errors → Flash</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑩ INFERENCE OPTIMIZATION -->
+<section id="inference">
+  <h2><span class="num">10</span> Inference Optimization Layer</h2>
+  <p class="desc">Four layers of optimization reduce latency and cost: semantic caching in Redis (1ms for cache hits), LiteLLM Redis prompt cache for identical prompts, vLLM continuous batching for self-hosted models, and QLoRA 4-bit quantization reducing the fine-tuned model size by 4×.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph LAYER1["Layer 1 — Semantic Cache (Redis)"]
+        SC["Exact SHA-256 key lookup\nquery+strategy+namespace → hash\nTTL: 3600s (1 hour)\nHit rate: ~30-40% in prod"]
+    end
+
+    subgraph LAYER2["Layer 2 — Prompt Cache (LiteLLM + Redis)"]
+        PC["Identical prompt strings cached\nGemini API call skipped entirely\nHit: ~1ms · Miss: full generation\nKey: SHA-256(model+prompt)"]
+    end
+
+    subgraph LAYER3["Layer 3 — vLLM Continuous Batching"]
+        VL["PagedAttention KV cache\nContinuous batching up to 32 req\nLoRA hot-loading — no restart\nThroughput: ~3000 tokens/s on T4"]
+    end
+
+    subgraph LAYER4["Layer 4 — QLoRA Quantization"]
+        QL["4-bit NF4 quantization (bitsandbytes)\nModel size: 7B → ~4GB VRAM\nLoRA rank 16 / alpha 32\nTraining: ~2h on single T4 GPU"]
+    end
+
+    Q["Query arrives"] --> LAYER1
+    LAYER1 -->|HIT ~1ms| RESP["Response"]
+    LAYER1 -->|MISS| LAYER2
+    LAYER2 -->|HIT ~1ms| RESP
+    LAYER2 -->|MISS| ROUTE["Model Router"]
+    ROUTE -->|Gemini API| RESP
+    ROUTE -->|Self-hosted| LAYER3
+    LAYER3 --> LAYER4
+    LAYER4 --> RESP
+
+    style LAYER1 fill:#14532d,stroke:#22c55e
+    style LAYER2 fill:#1e3a5f,stroke:#38bdf8
+    style LAYER3 fill:#1e1b4b,stroke:#6366f1
+    style LAYER4 fill:#78350f,stroke:#d97706
+    </div>
+  </div>
+
+  <div class="cards col2" style="margin-top:24px">
+    <div class="card">
+      <h3>⚡ Expected Latency After Optimization</h3>
+      <div class="bar-chart" style="margin-top:12px">
+        <div class="bar-row"><span class="bar-lbl" style="width:110px">Semantic cache</span><div class="bar-track"><div class="bar-fill" style="width:1%;background:#4ade80">&lt;1ms</div></div></div>
+        <div class="bar-row"><span class="bar-lbl" style="width:110px">Prompt cache</span><div class="bar-track"><div class="bar-fill" style="width:1%;background:#4ade80">&lt;1ms</div></div></div>
+        <div class="bar-row"><span class="bar-lbl" style="width:110px">Flash (cold)</span><div class="bar-track"><div class="bar-fill" style="width:45%;background:#38bdf8">~7s</div></div></div>
+        <div class="bar-row"><span class="bar-lbl" style="width:110px">Pro (cold)</span><div class="bar-track"><div class="bar-fill" style="width:78%;background:#fbbf24">~12s</div></div></div>
+        <div class="bar-row"><span class="bar-lbl" style="width:110px">vLLM LoRA</span><div class="bar-track"><div class="bar-fill" style="width:20%;background:#a78bfa">~3s</div></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🔧 vLLM LoRA Hot-Loading</h3>
+      <ul>
+        <li>Base model (e.g., Mistral-7B) loaded once in vLLM</li>
+        <li>LoRA adapter loaded dynamically via <code>lora_request</code></li>
+        <li>No vLLM restart — adapter slots pre-allocated</li>
+        <li>MLflow stores adapter as artifact: <code>lora-adapter-v{n}.tar.gz</code></li>
+        <li>Model Router switches to fine-tuned tier after successful health-check</li>
+        <li>Rollback: delete adapter → reverts to base model</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑪ LLMOPS LOOP -->
+<section id="llmops">
+  <h2><span class="num">11</span> LLMOps Continuous Improvement Loop</h2>
+  <p class="desc">Every query feeds a feedback loop — evaluation, drift detection, fine-tuning, and model promotion run automatically via Argo Workflows. The loop runs on GKE and uses MLflow as the central orchestrator for experiment tracking and model promotion.</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    QUERY["📝 User Query + Answer"] --> MLFLOW_LOG["📊 MLflow\nlog run: query · answer\ntokens · latency · tier"]
+    MLFLOW_LOG --> BQ_LOG["📦 BigQuery\nrag_analytics.queries"]
+    BQ_LOG --> RAGAS["🧪 RAGAS Eval\nfaithfulness\nrelevancy\nprecision"]
+    RAGAS --> DRIFT["📈 Evidently\ndata drift detection\n(JS divergence)"]
+    DRIFT --> DECISION{Drift detected\nor score below\nthreshold?}
+    DECISION -- No --> MONITOR["✅ Continue monitoring\nnext eval in 6h"]
+    DECISION -- Yes --> CURATE["🗃️ Curate Training Data\nfeedback + low-score\nqueries + corrections"]
+    CURATE --> FINETUNE["🔧 QLoRA Fine-tuning\nbitsandbytes 4-bit\nPEFT LoRA rank-16\n~2h on T4"]
+    FINETUNE --> REGISTER["📋 MLflow Model Registry\nrag-llm-adapter:v{n}\nPromotion: Staging"]
+    REGISTER --> VALIDATE["✅ Validation Run\nRAGAS on held-out set\n> threshold?"]
+    VALIDATE -- Pass --> PROMOTE["🚀 vLLM LoRA Hot-Load\nadapter → Production\nrouter.py updated"]
+    VALIDATE -- Fail --> ROLLBACK["↩️ Keep previous\nadapter version"]
+    PROMOTE --> ROUTER["🧠 Model Router\nroutes domain queries\nto fine-tuned tier"]
+    ROUTER --> QUERY
+
+    style QUERY fill:#131720,stroke:#7c83fd
+    style DECISION fill:#78350f,stroke:#d97706
+    style FINETUNE fill:#1e1b4b,stroke:#6366f1
+    style PROMOTE fill:#14532d,stroke:#22c55e
+    style ROLLBACK fill:#7f1d1d,stroke:#f87171
+    </div>
+  </div>
+
+  <div class="cards col3" style="margin-top:24px">
+    <div class="card">
+      <h3>📊 MLflow Tracking</h3>
+      <ul>
+        <li>Logs every RAG query as a run</li>
+        <li>Tracks latency, tokens, strategy, model_tier</li>
+        <li>Stores RAGAS eval scores as metrics</li>
+        <li>Model Registry for LoRA adapters</li>
+        <li>Staging → Production promotion workflow</li>
+      </ul>
+      <div style="margin-top:10px"><a href="http://localhost:5000" target="_blank" class="tag orange">→ MLflow :5000</a></div>
+    </div>
+    <div class="card">
+      <h3>🤖 Argo Workflows (argo/)</h3>
+      <ul>
+        <li><strong>eval-cron</strong> — RAGAS eval every 6h</li>
+        <li><strong>drift-detection</strong> — Evidently daily</li>
+        <li><strong>fine-tune-pipeline</strong> — QLoRA on feedback</li>
+        <li><strong>feedback-curator</strong> — curates training dataset</li>
+        <li>All workflows DAG-defined in YAML</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🧠 Model Router</h3>
+      <ul>
+        <li>Routes simple queries → Gemini Flash</li>
+        <li>Routes analytical queries → Gemini Pro</li>
+        <li>Routes domain queries → vLLM LoRA</li>
+        <li>Cost multiplier tracked per tier</li>
+        <li>Configured in <code>src/model_router/router.py</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ⑫ INFRASTRUCTURE -->
+<section id="infra">
+  <h2><span class="num">12</span> Infrastructure</h2>
+  <p class="desc">Local dev uses Docker Compose with 6 services. Production targets GKE via Terraform (52 resources planned). All GCP services use ADC or Workload Identity — no service account JSON keys committed anywhere.</p>
+
+  <div class="infra-grid">
+    <div class="infra-box">
+      <h4>🐳 Docker Compose (Local Dev)</h4>
+      <div class="infra-item"><span class="dot" style="background:#4ade80"></span><span>rag-api</span><span class="detail">:8080 · 2 uvicorn workers</span></div>
+      <div class="infra-item"><span class="dot" style="background:#38bdf8"></span><span>chromadb</span><span class="detail">:8000 · chroma 0.5.3</span></div>
+      <div class="infra-item"><span class="dot" style="background:#f87171"></span><span>redis</span><span class="detail">:6379 · 512MB maxmem · LRU</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fbbf24"></span><span>mlflow</span><span class="detail">:5000 · sqlite backend</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fb923c"></span><span>prometheus</span><span class="detail">:9090 · 15s scrape · 7d retention</span></div>
+      <div class="infra-item"><span class="dot" style="background:#a78bfa"></span><span>grafana</span><span class="detail">:3000 · auto-provisioned dashboard</span></div>
+    </div>
+    <div class="infra-box">
+      <h4>☁️ GCP Resources (Terraform — 52 resources)</h4>
+      <div class="infra-item"><span class="dot" style="background:#4ade80"></span><span>GKE Cluster</span><span class="detail">n2-standard-4 × 2 nodes</span></div>
+      <div class="infra-item"><span class="dot" style="background:#38bdf8"></span><span>Memorystore Redis</span><span class="detail">1 GB HA · us-central1</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fbbf24"></span><span>Vertex AI Vector Search</span><span class="detail">768-dim HNSW index</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fb923c"></span><span>BigQuery</span><span class="detail">rag_analytics dataset</span></div>
+      <div class="infra-item"><span class="dot" style="background:#a78bfa"></span><span>GCS Buckets</span><span class="detail">rag-docs / rag-processed</span></div>
+      <div class="infra-item"><span class="dot" style="background:#f87171"></span><span>Pub/Sub</span><span class="detail">rag-ingestion topic + DLQ</span></div>
+    </div>
+    <div class="infra-box">
+      <h4>🚀 Kubernetes Manifests (k8s/)</h4>
+      <div class="infra-item"><span class="dot" style="background:#4ade80"></span><span>deployment.yaml</span><span class="detail">2 replicas · rolling update</span></div>
+      <div class="infra-item"><span class="dot" style="background:#38bdf8"></span><span>service.yaml</span><span class="detail">ClusterIP + Ingress</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fbbf24"></span><span>hpa.yaml</span><span class="detail">2-10 pods · CPU 70%</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fb923c"></span><span>keda.yaml</span><span class="detail">Scale-to-zero · Redis queue</span></div>
+      <div class="infra-item"><span class="dot" style="background:#a78bfa"></span><span>mlflow.yaml</span><span class="detail">StatefulSet + PVC</span></div>
+    </div>
+    <div class="infra-box">
+      <h4>⚙️ Argo Workflows (argo/)</h4>
+      <div class="infra-item"><span class="dot" style="background:#4ade80"></span><span>eval-pipeline</span><span class="detail">RAGAS eval every 6h</span></div>
+      <div class="infra-item"><span class="dot" style="background:#38bdf8"></span><span>drift-detection</span><span class="detail">Evidently daily</span></div>
+      <div class="infra-item"><span class="dot" style="background:#fbbf24"></span><span>fine-tune-pipeline</span><span class="detail">QLoRA on feedback data</span></div>
+      <div class="infra-item"><span class="dot" style="background:#a78bfa"></span><span>feedback-curator</span><span class="detail">Curates training dataset</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ⑬ TECH STACK -->
+<section id="stack">
+  <h2><span class="num">13</span> Full Technology Stack</h2>
+  <p class="desc">Every library and service used in the project, organised by layer.</p>
+
+  <div class="cards col3" style="gap:20px">
+    <div class="card">
+      <h3>🌐 API Layer</h3>
+      <span class="tag">FastAPI 0.111</span><span class="tag">Uvicorn 0.30</span><span class="tag">Pydantic v2</span>
+      <span class="tag">prometheus-client</span><span class="tag">OpenTelemetry</span><span class="tag">CORS Middleware</span>
+    </div>
+    <div class="card">
+      <h3>🤖 LLM & Embeddings</h3>
+      <span class="tag">Gemini 2.5 Flash</span><span class="tag">Gemini 2.5 Pro</span>
+      <span class="tag">google-generativeai</span><span class="tag">text-embedding-004</span>
+      <span class="tag">Vertex AI SDK</span><span class="tag">vLLM</span>
+    </div>
+    <div class="card">
+      <h3>🔍 Retrieval</h3>
+      <span class="tag">ChromaDB 0.5.3</span><span class="tag">rank-bm25</span>
+      <span class="tag">sentence-transformers</span><span class="tag">spaCy 3.7</span>
+      <span class="tag">NetworkX</span><span class="tag">LangChain 0.2</span>
+    </div>
+    <div class="card">
+      <h3>📊 LLMOps & Eval</h3>
+      <span class="tag">MLflow 2.16</span><span class="tag">RAGAS</span>
+      <span class="tag">Evidently 0.4</span><span class="tag">PEFT / LoRA</span>
+      <span class="tag">TRL</span><span class="tag">bitsandbytes 4-bit</span>
+    </div>
+    <div class="card">
+      <h3>📈 Observability</h3>
+      <span class="tag">Prometheus 2.53</span><span class="tag">Grafana 10.4</span>
+      <span class="tag">prometheus-client</span><span class="tag">MLflow UI</span>
+      <span class="tag">BigQuery Analytics</span>
+    </div>
+    <div class="card">
+      <h3>⚡ Caching & Storage</h3>
+      <span class="tag">Redis 7</span><span class="tag">LiteLLM Redis Cache</span>
+      <span class="tag">ChromaDB</span><span class="tag">GCS</span>
+      <span class="tag">BigQuery</span><span class="tag">SQLite (MLflow)</span>
+    </div>
+    <div class="card">
+      <h3>🔐 Security</h3>
+      <span class="tag">Workload Identity</span><span class="tag">K8s Secrets</span>
+      <span class="tag">ADC</span><span class="tag">PII Redaction</span>
+      <span class="tag">Prompt Injection Guard</span><span class="tag">CORS</span>
+    </div>
+    <div class="card">
+      <h3>🏗️ Infrastructure & CI</h3>
+      <span class="tag">Docker Compose</span><span class="tag">Terraform</span>
+      <span class="tag">GKE</span><span class="tag">KEDA</span>
+      <span class="tag">Argo Workflows</span><span class="tag">GitHub Actions</span>
+    </div>
+    <div class="card">
+      <h3>☁️ GCP Services</h3>
+      <span class="tag">Vertex AI</span><span class="tag">Gemini API</span>
+      <span class="tag">GCS</span><span class="tag">BigQuery</span>
+      <span class="tag">Pub/Sub</span><span class="tag">Memorystore</span>
+    </div>
+  </div>
+</section>
+
+<!-- ⑭ API ENDPOINTS -->
+<section>
+  <h2><span class="num">14</span> API Endpoints</h2>
+  <p class="desc">All routes exposed by the FastAPI app. Full OpenAPI docs at <a href="/docs">/docs</a>.</p>
+  <table>
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge post">POST</span></td><td><code>/rag/query</code></td><td>Run a RAG query with chosen strategy — returns answer, sources, tokens, latency, model_tier</td></tr>
+      <tr><td><span class="badge post">POST</span></td><td><code>/rag/compare</code></td><td>Run all 5 strategies in parallel and compare results</td></tr>
+      <tr><td><span class="badge post">POST</span></td><td><code>/ingest/gcs</code></td><td>Ingest a document from GCS URI into ChromaDB</td></tr>
+      <tr><td><span class="badge post">POST</span></td><td><code>/ingest/upload</code></td><td>Upload and ingest a local file</td></tr>
+      <tr><td><span class="badge post">POST</span></td><td><code>/eval/run</code></td><td>Trigger RAGAS evaluation run</td></tr>
+      <tr><td><span class="badge post">POST</span></td><td><code>/feedback</code></td><td>Submit thumbs-up/down feedback on an answer</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/llmops/drift-check</code></td><td>Run Evidently drift detection on recent queries</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/llmops/model-registry</code></td><td>List registered LoRA adapters in MLflow</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/health</code></td><td>Kubernetes liveness probe</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/ready</code></td><td>Readiness probe + strategy list</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/metrics</code></td><td>Prometheus metrics (scraped every 15s)</td></tr>
+      <tr><td><span class="badge get">GET</span></td><td><code>/docs</code></td><td>Swagger UI — interactive OpenAPI docs</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:24px">
+    <strong>Live services right now:</strong>&nbsp;
+    <a href="http://localhost:8080/docs" target="_blank">API Docs :8080/docs</a> ·
+    <a href="http://localhost:5000" target="_blank">MLflow :5000</a> ·
+    <a href="http://localhost:9090" target="_blank">Prometheus :9090</a> ·
+    <a href="http://localhost:3000" target="_blank">Grafana :3000 (admin/admin)</a> ·
+    <a href="http://localhost:8000" target="_blank">ChromaDB :8000</a>
+  </div>
+</section>
+
+<div style="height:60px"></div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#131720',
+      primaryColor: '#1e2535',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#7c83fd',
+      lineColor: '#475569',
+      secondaryColor: '#1e2535',
+      tertiaryColor: '#0d1018',
+      edgeLabelBackground: '#131720',
+      nodeTextColor: '#e2e8f0',
+    }
+  });
+
+  // nav highlight on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+  window.addEventListener('scroll', () => {
+    let cur = '';
+    sections.forEach(s => { if (window.scrollY >= s.offsetTop - 120) cur = s.id; });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+    });
+  });
+</script>
+</body>
+</html>

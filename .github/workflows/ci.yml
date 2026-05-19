@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt pytest pytest-asyncio
+
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check src/ config/
+
+      - name: Test
+        run: pytest tests/ -v --tb=short
+        env:
+          GCP_PROJECT_ID: test-project
+          USE_VERTEX_VECTOR_SEARCH: "false"
+          USE_SEMANTIC_CACHE: "false"
+          ENABLE_GUARDRAILS: "true"
+
+  eval-gate:
+    # Blocks merge if RAGAS quality drops below configured thresholds.
+    # Skipped automatically on forks (no GEMINI_API_KEY secret available).
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ secrets.GEMINI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run RAGAS quality gate
+        run: |
+          python -c "
+          import asyncio, json, sys
+          from src.evaluation.ragas_eval import RAGASEvaluator
+
+          THRESHOLDS = {
+              'faithfulness':        0.70,
+              'answer_relevancy':    0.70,
+              'context_precision':   0.60,
+              'context_recall':      0.60,
+              'answer_correctness':  0.65,
+          }
+
+          async def main():
+              ev = RAGASEvaluator()
+              metrics = await ev.evaluate(strategy='hybrid', namespace='default')
+              m = metrics.model_dump()
+              print(json.dumps(m, indent=2))
+              failures = [k for k, thresh in THRESHOLDS.items() if m.get(k, 0) < thresh]
+              if failures:
+                  print(f'QUALITY GATE FAILED: {failures}', file=sys.stderr)
+                  sys.exit(1)
+              print('Quality gate passed.')
+
+          asyncio.run(main())
+          "
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          USE_VERTEX_VECTOR_SEARCH: "false"
+          USE_SEMANTIC_CACHE: "false"
+          ENABLE_GUARDRAILS: "false"
+          MLFLOW_TRACKING_URI: "sqlite:///ci-mlflow.db"
+
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -f docker/Dockerfile -t rag-api:test .

@@ -1,0 +1,22 @@
+[
+  {
+    "question": "What is the company's remote work policy?",
+    "ground_truth": "Employees may work remotely up to 3 days per week with manager approval."
+  },
+  {
+    "question": "How do I request annual leave?",
+    "ground_truth": "Submit a leave request through the HR portal at least 5 business days in advance."
+  },
+  {
+    "question": "What is the data retention policy for customer records?",
+    "ground_truth": "Customer records are retained for 7 years in compliance with regulatory requirements."
+  },
+  {
+    "question": "What cloud providers does the company use?",
+    "ground_truth": "The company primarily uses Google Cloud Platform with AWS as a secondary provider."
+  },
+  {
+    "question": "What is the escalation process for production incidents?",
+    "ground_truth": "P1 incidents must be escalated to the on-call engineer within 15 minutes and to management within 30 minutes."
+  }
+]

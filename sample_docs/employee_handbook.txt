@@ -1,0 +1,97 @@
+EMPLOYEE HANDBOOK — ACME CORP
+Version 2.0 | Effective January 2025
+
+========================================
+SECTION 1: PAID HOLIDAYS
+========================================
+
+Acme Corp observes 12 paid public holidays per calendar year. All full-time employees
+are entitled to these days off with full pay.
+
+Official Public Holidays (2025):
+  1. New Year's Day          — January 1
+  2. Martin Luther King Day  — January 20
+  3. Presidents' Day         — February 17
+  4. Memorial Day            — May 26
+  5. Independence Day        — July 4
+  6. Labor Day               — September 1
+  7. Columbus Day            — October 13
+  8. Veterans Day            — November 11
+  9. Thanksgiving Day        — November 27
+ 10. Day after Thanksgiving  — November 28
+ 11. Christmas Eve           — December 24
+ 12. Christmas Day           — December 25
+
+If a holiday falls on a Saturday, it is observed on the preceding Friday.
+If a holiday falls on a Sunday, it is observed on the following Monday.
+
+========================================
+SECTION 2: ANNUAL LEAVE (VACATION)
+========================================
+
+Employees accrue paid vacation based on years of service:
+
+  0–2 years:    15 days per year  (1.25 days/month)
+  3–5 years:    20 days per year  (1.67 days/month)
+  6–10 years:   25 days per year  (2.08 days/month)
+  10+ years:    30 days per year  (2.50 days/month)
+
+Vacation days must be approved by your manager at least 2 weeks in advance.
+A maximum of 10 unused days may be carried over to the next calendar year.
+Unused days beyond the carry-over limit are forfeited on December 31.
+
+========================================
+SECTION 3: SICK LEAVE
+========================================
+
+All employees receive 10 paid sick days per calendar year.
+Sick days do not carry over to the next year.
+A doctor's note is required for absences exceeding 3 consecutive days.
+
+========================================
+SECTION 4: PERSONAL DAYS
+========================================
+
+Employees receive 3 personal days per calendar year for personal matters,
+family emergencies, or religious observances not covered by public holidays.
+Personal days must be requested at least 24 hours in advance when possible.
+
+========================================
+SECTION 5: BEREAVEMENT LEAVE
+========================================
+
+Paid bereavement leave is provided as follows:
+  - Immediate family (spouse, child, parent, sibling): 5 days
+  - Extended family (grandparent, in-law, aunt/uncle): 3 days
+  - Close friend or colleague: 1 day
+
+========================================
+SECTION 6: PARENTAL LEAVE
+========================================
+
+Primary caregiver: 16 weeks fully paid parental leave.
+Secondary caregiver: 4 weeks fully paid parental leave.
+Parental leave can be taken any time within 12 months of the child's birth or adoption.
+
+========================================
+SECTION 7: TOTAL LEAVE SUMMARY
+========================================
+
+At a glance — a mid-career employee (3–5 years) receives:
+  - 12 public holidays
+  - 20 vacation days
+  - 10 sick days
+  - 3 personal days
+  -------------------------
+  Total: 45 days off per year (excluding parental/bereavement)
+
+========================================
+SECTION 8: LEAVE REQUEST PROCESS
+========================================
+
+1. Submit request via the HR portal (hr.acmecorp.com)
+2. Manager approves or declines within 3 business days
+3. Calendar invite sent to the team automatically
+4. For sick leave: notify your manager before 9 AM on the day of absence
+
+For questions, contact HR at hr@acmecorp.com or ext. 4200.

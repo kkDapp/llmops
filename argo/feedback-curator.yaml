@@ -1,0 +1,219 @@
+# Weekly Feedback Curation CronWorkflow
+# Runs every Sunday at 3am UTC.
+# Collects 👎 feedback from BigQuery, curates training pairs,
+# saves to GCS as a versioned dataset.
+#
+# WHY this matters:
+#   Raw user feedback is noisy. This job filters, deduplicates,
+#   and formats it into (query, bad_answer, good_answer) training
+#   pairs that QLoRA fine-tuning can consume.
+
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: rag-feedback-curator
+  namespace: argo
+spec:
+  schedule: "0 3 * * 0"   # 3am UTC every Sunday
+  timezone: "UTC"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    entrypoint: curate-pipeline
+    arguments:
+      parameters:
+        - name: app-image
+          value: "YOUR_REGISTRY/rag-api:latest"
+        - name: min-rating-threshold
+          value: "2"      # collect feedback with rating <= 2 (bad answers)
+        - name: min-samples
+          value: "50"     # only trigger fine-tune if at least 50 bad examples collected
+
+    templates:
+      - name: curate-pipeline
+        dag:
+          tasks:
+            - name: collect-feedback
+              template: collect
+            - name: deduplicate
+              template: dedup
+              dependencies: [collect-feedback]
+            - name: save-dataset
+              template: save
+              dependencies: [deduplicate]
+            - name: trigger-finetune-if-ready
+              template: maybe-trigger-finetune
+              dependencies: [save-dataset]
+
+      - name: collect
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import json
+              from google.cloud import bigquery, storage
+              import os
+
+              project = os.environ["GCP_PROJECT_ID"]
+              bq = bigquery.Client(project=project)
+              threshold = int("{{workflow.parameters.min-rating-threshold}}")
+
+              rows = list(bq.query(f"""
+                SELECT query, answer, strategy, rating, comment, feedback_id
+                FROM `{project}.rag_analytics.feedback`
+                WHERE rating <= {threshold}
+                  AND DATE(timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                ORDER BY rating ASC, timestamp DESC
+                LIMIT 1000
+              """).result())
+
+              data = [dict(r) for r in rows]
+              print(f"Collected {len(data)} negative feedback samples")
+
+              # Save to GCS as staging file
+              gcs = storage.Client(project=project)
+              bucket = gcs.bucket(os.environ["GCS_PROCESSED_BUCKET"])
+              blob = bucket.blob("feedback/staging/raw_feedback.json")
+              blob.upload_from_string(json.dumps(data))
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: GCS_PROCESSED_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcs_processed_bucket
+
+      - name: dedup
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import json, hashlib
+              from google.cloud import storage
+              import os
+
+              project = os.environ["GCP_PROJECT_ID"]
+              gcs = storage.Client(project=project)
+              bucket = gcs.bucket(os.environ["GCS_PROCESSED_BUCKET"])
+
+              raw = json.loads(bucket.blob("feedback/staging/raw_feedback.json").download_as_text())
+
+              # Dedup by query fingerprint
+              seen = set()
+              deduped = []
+              for item in raw:
+                  key = hashlib.md5(item["query"].lower().strip().encode()).hexdigest()
+                  if key not in seen:
+                      seen.add(key)
+                      deduped.append(item)
+
+              print(f"After dedup: {len(deduped)} samples (removed {len(raw) - len(deduped)} duplicates)")
+              bucket.blob("feedback/staging/deduped_feedback.json").upload_from_string(json.dumps(deduped))
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: GCS_PROCESSED_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcs_processed_bucket
+
+      - name: save
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import json, mlflow, os
+              from datetime import datetime
+              from google.cloud import storage
+
+              project = os.environ["GCP_PROJECT_ID"]
+              gcs = storage.Client(project=project)
+              bucket = gcs.bucket(os.environ["GCS_PROCESSED_BUCKET"])
+
+              deduped = json.loads(bucket.blob("feedback/staging/deduped_feedback.json").download_as_text())
+
+              # Format as training pairs: {"query": ..., "rejected": bad_answer, "context": "needs improvement"}
+              training_pairs = [
+                  {"query": item["query"], "rejected": item["answer"], "rating": item["rating"], "comment": item["comment"]}
+                  for item in deduped
+              ]
+
+              # Version the dataset with timestamp
+              version = datetime.now().strftime("%Y%m%d")
+              path = f"feedback/datasets/v{version}/training_pairs.json"
+              bucket.blob(path).upload_from_string(json.dumps(training_pairs))
+              print(f"Saved {len(training_pairs)} training pairs to gs://{os.environ['GCS_PROCESSED_BUCKET']}/{path}")
+
+              # Log dataset to MLflow
+              mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+              mlflow.set_experiment("rag-finetune")
+              with mlflow.start_run(run_name=f"dataset-v{version}"):
+                  mlflow.log_param("dataset_version", version)
+                  mlflow.log_metric("num_training_pairs", len(training_pairs))
+                  mlflow.set_tag("dataset_path", f"gs://{os.environ['GCS_PROCESSED_BUCKET']}/{path}")
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: GCS_PROCESSED_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcs_processed_bucket
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: mlflow_tracking_uri
+
+      - name: maybe-trigger-finetune
+        container:
+          image: "{{workflow.parameters.app-image}}"
+          command: [python, -c]
+          args:
+            - |
+              import json, os
+              from google.cloud import storage
+              import subprocess
+
+              project = os.environ["GCP_PROJECT_ID"]
+              gcs = storage.Client(project=project)
+              bucket = gcs.bucket(os.environ["GCS_PROCESSED_BUCKET"])
+              from datetime import datetime
+              version = datetime.now().strftime("%Y%m%d")
+
+              pairs = json.loads(bucket.blob(f"feedback/datasets/v{version}/training_pairs.json").download_as_text())
+              min_samples = int("{{workflow.parameters.min-samples}}")
+
+              if len(pairs) >= min_samples:
+                  print(f"{len(pairs)} samples ready — triggering fine-tune pipeline")
+                  subprocess.run([
+                      "argo", "submit", "/argo/fine-tune-pipeline.yaml",
+                      "-n", "argo",
+                      "-p", f"dataset-version={version}",
+                  ], check=True)
+              else:
+                  print(f"Only {len(pairs)} samples — need {min_samples} to trigger fine-tune. Skipping.")
+          env:
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcp_project_id
+            - name: GCS_PROCESSED_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: rag-config
+                  key: gcs_processed_bucket
