@@ -10,7 +10,7 @@ serviceAccount:
   gcpServiceAccount: rag-api-sa@llmops-495904.iam.gserviceaccount.com
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   port: 80
   targetPort: 8080
 
