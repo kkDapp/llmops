@@ -14,16 +14,20 @@ spec:
       labels:
         app: mlflow
     spec:
+      serviceAccountName: rag-api
       containers:
         - name: mlflow
           image: ghcr.io/mlflow/mlflow:v2.13.2
           command:
-            - mlflow
-            - server
-            - --host=0.0.0.0
-            - --port=5000
-            - --backend-store-uri=sqlite:///mlflow.db
-            - --default-artifact-root=gs://$(GCS_PROCESSED_BUCKET)/mlflow-artifacts
+            - sh
+            - -c
+            - |
+              pip install --quiet "google-cloud-storage" "protobuf>=3.12.0,<5" && \
+              mlflow server \
+                --host=0.0.0.0 \
+                --port=5000 \
+                --backend-store-uri=sqlite:////mlflow/mlflow.db \
+                --default-artifact-root=gs://$(GCS_PROCESSED_BUCKET)/mlflow-artifacts
           ports:
             - containerPort: 5000
           env:
@@ -68,4 +72,4 @@ spec:
   ports:
     - port: 5000
       targetPort: 5000
-  type: ClusterIP
+  type: LoadBalancer
