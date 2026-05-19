@@ -76,12 +76,11 @@ jobs:
 
       - name: Deploy to GKE via Helm
         run: |
-          IMAGE_TAG=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }}
           helm upgrade --install rag-api helm/rag-api \
             --namespace default \
             --set image.tag=${{ github.sha }} \
             --set image.repository=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }} \
-            --atomic \
-            --timeout 5m \
+            --force \
+            --timeout 10m \
             --history-max 5
-          kubectl rollout status deployment/rag-api-rag-api --timeout=5m
+          kubectl rollout status deployment/rag-api-rag-api --timeout=10m

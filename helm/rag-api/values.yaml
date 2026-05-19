@@ -41,9 +41,14 @@ autoscaling:
   targetMemoryUtilizationPercentage: 70
 
 env:
-  USE_VERTEX_VECTOR_SEARCH: "true"
+  CHROMA_HOST: "chromadb"
+  GCS_BUCKET_NAME: "llmops-495904-rag-docs"
+  USE_VERTEX_VECTOR_SEARCH: "false"
   USE_SEMANTIC_CACHE: "true"
   ENABLE_GUARDRAILS: "true"
+  ENABLE_RERANKER: "true"
+  ENABLE_VERIFICATION: "true"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
 
 # Secret name containing: gcp_project_id, redis_host, vector_search_index_id, etc.
 secretName: rag-config

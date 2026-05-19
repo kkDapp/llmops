@@ -32,10 +32,24 @@ spec:
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
-            {{- range $k, $v := .Values.env }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
+            # --- plain env vars from values.yaml ---
+            - name: CHROMA_HOST
+              value: {{ .Values.env.CHROMA_HOST | quote }}
+            - name: GCS_BUCKET_NAME
+              value: {{ .Values.env.GCS_BUCKET_NAME | quote }}
+            - name: USE_VERTEX_VECTOR_SEARCH
+              value: {{ .Values.env.USE_VERTEX_VECTOR_SEARCH | quote }}
+            - name: USE_SEMANTIC_CACHE
+              value: {{ .Values.env.USE_SEMANTIC_CACHE | quote }}
+            - name: ENABLE_GUARDRAILS
+              value: {{ .Values.env.ENABLE_GUARDRAILS | quote }}
+            - name: ENABLE_RERANKER
+              value: {{ .Values.env.ENABLE_RERANKER | quote }}
+            - name: ENABLE_VERIFICATION
+              value: {{ .Values.env.ENABLE_VERIFICATION | quote }}
+            - name: MLFLOW_TRACKING_URI
+              value: {{ .Values.env.MLFLOW_TRACKING_URI | quote }}
+            # --- secrets ---
             - name: GCP_PROJECT_ID
               valueFrom:
                 secretKeyRef:
@@ -46,6 +60,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: redis_host
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: gemini_api_key
             - name: VECTOR_SEARCH_INDEX_ID
               valueFrom:
                 secretKeyRef:
