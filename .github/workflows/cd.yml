@@ -8,6 +8,7 @@ on:
       - "config/**"
       - "docker/Dockerfile"
       - "requirements.txt"
+  workflow_dispatch:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
